@@ -1,3 +1,6 @@
 __pycache__/
 output.txt
 data/
+checkpoints/
+.idea/
+.DS_Store

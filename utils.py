@@ -1,9 +1,10 @@
 import numpy as np
+import math
 from scipy.sparse import csr_matrix
 from tqdm import tqdm
 
 # NDCG Function
-def ndcg_at_k_from_factors(R_test: csr_matrix, X: np.ndarray, Y: np.ndarray, R_train: csr_matrix=None, k=10) -> float:
+def ndcg_at_k_from_factors(R_test: csr_matrix,  X: np.ndarray, Y: np.ndarray, R_train: csr_matrix=None, k=10) -> float:
     print(f"Calculating NDCG@{k}")
     n_users = R_test.shape[0]
     ndcgs = []
@@ -41,6 +42,15 @@ def ndcg_at_k_from_factors(R_test: csr_matrix, X: np.ndarray, Y: np.ndarray, R_t
     
     return np.mean(ndcgs) if ndcgs else 0.0
 
+def ndcg_at_k(pred, truth, k):
+    dcg = 0.0
+    for idx, item in enumerate(pred[:k], start=1):
+        if item in truth:
+            dcg += 1.0 / math.log2(idx+1)
+    # IDCG when all truth are in top-k
+    ideal_hits = min(k, len(truth))
+    idcg = sum(1.0 / math.log2(i+1) for i in range(1, ideal_hits+1))
+    return dcg / idcg if idcg > 0 else 0.0
 
 def write_results_to_file(results: list[list], path: str):
     with open(path, "w") as f:
