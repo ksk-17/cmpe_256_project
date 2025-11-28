@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.sparse import csr_matrix
 from sklearn.utils import shuffle
+import torch
 
 def load_dataset():
     user_interaction_data = {}
@@ -120,6 +121,13 @@ def split_csr_train_val_test(csr: csr_matrix, val_ratio=0.1, test_ratio=0.1, see
     print(f"Test interactions: {test_csr.nnz}")
 
     return train_csr, val_csr, test_csr
+
+def convert_csr_to_edge_list(csr_matrix):
+    """Converts the training CSR matrix to a tensor of (user_id, item_id) pairs."""
+    coo_matrix = csr_matrix.tocoo()
+    users = torch.tensor(coo_matrix.row, dtype=torch.long)
+    items = torch.tensor(coo_matrix.col, dtype=torch.long)
+    return users, items
 
 if __name__ == "__main__":
     df = load_dataset()
