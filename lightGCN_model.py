@@ -201,6 +201,8 @@ def run_experiment(exp_name, n_layers, embed_dim, n_epochs, train_csr, val_csr, 
             item_final_np = item_final.cpu().numpy()
             
             val_ndcg = ndcg_at_k_from_factors(R_test=val_csr, X=user_final_np, Y=item_final_np, R_train=train_csr, k=20)
+
+            print(f"Epoch {epoch} NDCG@20: {val_ndcg:.4f}")
             
             if val_ndcg > best_ndcg:
                 best_ndcg = val_ndcg
@@ -238,7 +240,7 @@ if __name__ == "__main__":
     for name, layers, dim in experiments:
         ndcg, trained_model = run_experiment(
             name, layers, dim, 
-            n_epochs=5, 
+            n_epochs=20, 
             train_csr=train_csr, val_csr=val_csr, 
             adj_matrix_norm=adj_matrix_norm, 
             n_users=n_users, n_items=n_items, 

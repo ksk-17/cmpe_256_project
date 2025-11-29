@@ -119,8 +119,3 @@ if __name__ == "__main__":
 
     # write the results
     write_results_to_file(results, "output.txt")
-    
-
-
-
-    
