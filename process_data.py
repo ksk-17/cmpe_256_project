@@ -1,31 +1,37 @@
-import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.sparse import csr_matrix
 from sklearn.utils import shuffle
 import torch
 import random
 from torch.utils.data import Dataset
 
+
 def load_dataset():
+    """
+    Read train-2.txt where each line is:
+        user_id item_id1 item_id2 ...
+    """
     user_interaction_data = {}
-    with open('data/train-2.txt', 'r') as file:
+    with open("data/train-2.txt", "r") as file:
         for line in file:
-            if line.strip() != '':
+            if line.strip() != "":
                 row = [int(x) for x in line.strip().split()]
                 user_interaction_data[row[0]] = row[1:]
     print("Loaded the dataset")
     print("First record:", user_interaction_data[0])
     return user_interaction_data
 
+
 def get_statistics_and_csr(df: dict):
     print("\n\nStatistics")
     total_users = len(df)
-
     print(f"\n\nTotal users: {total_users}")
-    # get the users lengths
+
+    # user lengths
     user_interaction_lengths = {key: len(value) for key, value in df.items()}
-    sorted_user_interaction_lengths = sorted(user_interaction_lengths.items(), key=lambda x: x[1], reverse=True)
+    sorted_user_interaction_lengths = sorted(
+        user_interaction_lengths.items(), key=lambda x: x[1], reverse=True
+    )
     print("Top 10 User Interaction Lengths:")
     for key, value in sorted_user_interaction_lengths[:5]:
         print(f"{key}: {value}")
@@ -34,14 +40,11 @@ def get_statistics_and_csr(df: dict):
     for key, value in sorted_user_interaction_lengths[-5:]:
         print(f"{key}: {value}")
 
-    # get the item frequencies
+    # item frequencies
     item_freqs = {}
     for items in df.values():
         for item in items:
-            if item not in item_freqs:
-                item_freqs[item] = 1
-            else:
-                item_freqs[item] += 1
+            item_freqs[item] = item_freqs.get(item, 0) + 1
     total_items = len(item_freqs)
     print(f"\n\nTotal items: {total_items}")
 
@@ -54,7 +57,7 @@ def get_statistics_and_csr(df: dict):
     for key, value in sorted_item_freqs[-5:]:
         print(f"{key}: {value}")
 
-    # built the csr matrix
+    # build csr matrix
     user_to_idx = {user: idx for idx, user in enumerate(df.keys())}
     item_to_idx = {item: idx for idx, item in enumerate(item_freqs.keys())}
     idx_to_user = {idx: user for user, idx in user_to_idx.items()}
@@ -78,7 +81,9 @@ def get_statistics_and_csr(df: dict):
     return csr, idx_to_user, idx_to_item
 
 
-def split_csr_train_val_test(csr: csr_matrix, val_ratio=0.1, test_ratio=0.1, seed=42):
+def split_csr_train_val_test(
+    csr: csr_matrix, val_ratio: float = 0.1, test_ratio: float = 0.1, seed: int = 42
+):
     np.random.seed(seed)
     n_users, n_items = csr.shape
 
@@ -89,7 +94,6 @@ def split_csr_train_val_test(csr: csr_matrix, val_ratio=0.1, test_ratio=0.1, see
     for user in range(n_users):
         start_ptr, end_ptr = csr.indptr[user], csr.indptr[user + 1]
         user_items = csr.indices[start_ptr:end_ptr]
-
         if len(user_items) == 0:
             continue
 
@@ -99,8 +103,8 @@ def split_csr_train_val_test(csr: csr_matrix, val_ratio=0.1, test_ratio=0.1, see
         n_test = int(n_total * test_ratio)
 
         val_items = user_items[:n_val]
-        test_items = user_items[n_val: n_val + n_test]
-        train_items = user_items[n_val + n_test:]
+        test_items = user_items[n_val : n_val + n_test]
+        train_items = user_items[n_val + n_test :]
 
         train_rows.extend([user] * len(train_items))
         train_cols.extend(train_items)
@@ -133,6 +137,7 @@ def convert_csr_to_edge_list(csr_matrix):
     return users, items
 
 def build_index():
+    """Index-based representation used by popularity + NeuralMF."""
     interactions = load_dataset()
     users = sorted(interactions.keys())
     items = sorted({i for S in interactions.values() for i in S})
@@ -140,10 +145,13 @@ def build_index():
     idx2user = {i: u for u, i in user2idx.items()}
     item2idx = {it: i for i, it in enumerate(items)}
     idx2item = {i: it for it, i in item2idx.items()}
-    # convert to index form
-    ui_pos = {user2idx[u]: set(item2idx[it] for it in items if it in item2idx)
-              for u, items in interactions.items()}
+
+    ui_pos = {
+        user2idx[u]: set(item2idx[it] for it in items if it in item2idx)
+        for u, items in interactions.items()
+    }
     return ui_pos, user2idx, idx2user, item2idx, idx2item
+
 
 def train_valid_split(ui_pos, valid_ratio=0.1, seed=42):
     rng = random.Random(seed)
@@ -151,7 +159,6 @@ def train_valid_split(ui_pos, valid_ratio=0.1, seed=42):
     valid = {}
     for u, items in ui_pos.items():
         if len(items) == 1:
-            # keep single interactions for train only
             train[u] = set(items)
             valid[u] = set()
             continue
@@ -164,7 +171,13 @@ def train_valid_split(ui_pos, valid_ratio=0.1, seed=42):
         valid[u] = valid_items
     return train, valid
 
+
 class PairDataset(Dataset):
+    """
+    Used for NeuralMF:
+    returns (user, positive_item, [negatives...])
+    """
+
     def __init__(self, ui_pos, num_items, num_neg=4, pop_weights=None):
         self.ui_pos = [(u, i) for u, items in ui_pos.items() for i in items]
         self.user_pos = {u: set(items) for u, items in ui_pos.items()}
@@ -176,7 +189,6 @@ class PairDataset(Dataset):
         return len(self.ui_pos)
 
     def sample_neg(self, u):
-        # popularity-weighted or uniform negatives
         while True:
             if self.pop_weights is not None:
                 j = np.random.choice(self.num_items, p=self.pop_weights)
@@ -188,7 +200,6 @@ class PairDataset(Dataset):
     def __getitem__(self, idx):
         u, i = self.ui_pos[idx]
         negs = [self.sample_neg(u) for _ in range(self.num_neg)]
-        # return positive pair and negatives for the same user
         return u, i, torch.tensor(negs, dtype=torch.long)
 
 
